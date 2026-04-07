@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:geolocator/geolocator.dart';
 
+import '../services/location_service.dart';
 import '../state/location_provider.dart';
 import '../widgets/search_app_bar.dart';
 import '../widgets/tab_content.dart';
@@ -21,49 +21,35 @@ class _WeatherHomePageState extends ConsumerState<WeatherHomePage> {
   static const _tabs = ['Currently', 'Today', 'Weekly'];
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _fetchGpsLocation();
+    });
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
   }
 
-  Future<void> _onGeolocationPressed() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location services are disabled.')),
-        );
-      }
-      return;
-    }
-
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permission denied.')),
-        );
-      }
-      return;
-    }
-
+  Future<void> _fetchGpsLocation() async {
     try {
-      await Geolocator.getCurrentPosition();
-      ref.read(locationProvider.notifier).state = 'Geolocation';
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not get location: $e')),
-        );
-      }
+      final position = await fetchGpsPosition();
+      if (!mounted) return;
+      ref.read(locationProvider.notifier).state =
+          formatGpsCoordinates(position);
+    } on LocationException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
     }
   }
+
+  Future<void> _onGeolocationPressed() => _fetchGpsLocation();
 
   void _onSearchSubmitted(String value) {
     ref.read(locationProvider.notifier).state = value.trim();
